@@ -11,12 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Set up Node
+      - name: Set up Node.js 20
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install Dependencies
         run: npm install
@@ -24,10 +25,13 @@ jobs:
       - name: Build Web App
         run: npm run build
 
-      - name: Install Capacitor & Android
+      - name: Install Capacitor CLI & Sync Android
         run: |
           npm install @capacitor/cli
-          npx cap sync
+          npx cap sync android
+
+      - name: Build Android Debug APK
+        run: |
           cd android
           ./gradlew assembleDebug
 
