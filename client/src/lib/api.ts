@@ -1,5 +1,3 @@
-const BASE_URL = 'http://localhost:5000';
-
 interface ApiResponse<T> {
   data?: T;
   error?: string;
@@ -8,7 +6,7 @@ interface ApiResponse<T> {
 // Generic API fetch wrapper with error handling
 async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<ApiResponse<T>> {
   try {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
+    const response = await fetch(`/api${endpoint}`, {
       headers: {
         'Content-Type': 'application/json',
         ...options?.headers,
@@ -25,7 +23,7 @@ async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<ApiR
   } catch (error) {
     console.error(`API call failed for ${endpoint}:`, error);
     return { 
-      error: error instanceof Error ? error.message : 'Network error - check if Flask backend is running'
+      error: error instanceof Error ? error.message : 'Network error - check backend connection'
     };
   }
 }
