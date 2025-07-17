@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getDrowsinessStatus, getTrafficStatus, controlMotor as apiControlMotor, toggleHazard as apiToggleHazard, getRoute } from '@/lib/api';
 
 interface CarStatus {
   drowsy: boolean;
@@ -15,7 +16,7 @@ interface CarRoute {
   traffic_level: 'low' | 'medium' | 'high';
 }
 
-export function useCarAPI(baseUrl: string = 'https://your-pi-ip:5000') {
+export function useCarAPI() {
   const [status, setStatus] = useState<CarStatus>({
     drowsy: false,
     traffic_jam: false,
@@ -25,59 +26,95 @@ export function useCarAPI(baseUrl: string = 'https://your-pi-ip:5000') {
   const [route, setRoute] = useState<CarRoute | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data for demo purposes
+  // Fetch real-time status from Flask backend
   useEffect(() => {
-    // Simulate API connection
-    const interval = setInterval(() => {
-      setStatus(prev => ({
-        ...prev,
-        drowsy: Math.random() > 0.8,
-        traffic_jam: Math.random() > 0.7,
-      }));
-      setIsConnected(true);
-      setLoading(false);
-    }, 2000);
+    const fetchStatus = async () => {
+      try {
+        const [drowsinessResult, trafficResult] = await Promise.all([
+          getDrowsinessStatus(),
+          getTrafficStatus()
+        ]);
 
-    // Mock route data
-    setRoute({
-      from: "Home",
-      to: "Office",
-      distance: "12.3 km",
-      duration: "18 min",
-      traffic_level: Math.random() > 0.5 ? 'low' : 'medium',
-    });
+        if (drowsinessResult.error || trafficResult.error) {
+          setError(drowsinessResult.error || trafficResult.error || 'API connection failed');
+          setIsConnected(false);
+        } else {
+          setStatus(prev => ({
+            ...prev,
+            drowsy: drowsinessResult.data?.drowsy || false,
+            traffic_jam: trafficResult.data?.traffic_jam || false,
+          }));
+          setIsConnected(true);
+          setError(null);
+        }
+      } catch (err) {
+        setError('Failed to connect to Flask backend');
+        setIsConnected(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Initial fetch
+    fetchStatus();
+
+    // Poll for updates every 3 seconds
+    const interval = setInterval(fetchStatus, 3000);
 
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch route data
+  useEffect(() => {
+    const fetchRoute = async () => {
+      const routeResult = await getRoute();
+      if (routeResult.data) {
+        setRoute(routeResult.data);
+      } else {
+        // Fallback route data if API doesn't have route endpoint yet
+        setRoute({
+          from: "Home",
+          to: "Office", 
+          distance: "12.3 km",
+          duration: "18 min",
+          traffic_level: 'low',
+        });
+      }
+    };
+
+    fetchRoute();
+  }, []);
+
   const controlMotor = async (action: 'on' | 'off') => {
     try {
-      // Mock API call
-      setStatus(prev => ({ ...prev, motor_on: action === 'on' }));
-      // In real implementation:
-      // await fetch(`${baseUrl}/control`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ motor: action })
-      // });
+      const result = await apiControlMotor(action);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setStatus(prev => ({ ...prev, motor_on: action === 'on' }));
+        setError(null);
+      }
     } catch (error) {
       console.error('Motor control failed:', error);
+      setError('Motor control failed');
     }
   };
 
   const toggleHazard = async () => {
     try {
       const newState = !status.hazard_on;
-      setStatus(prev => ({ ...prev, hazard_on: newState }));
-      // In real implementation:
-      // await fetch(`${baseUrl}/control`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ hazard: newState })
-      // });
+      const result = await apiToggleHazard(newState);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setStatus(prev => ({ ...prev, hazard_on: newState }));
+        setError(null);
+      }
     } catch (error) {
       console.error('Hazard toggle failed:', error);
+      setError('Hazard control failed');
     }
   };
 
@@ -86,6 +123,7 @@ export function useCarAPI(baseUrl: string = 'https://your-pi-ip:5000') {
     route,
     isConnected,
     loading,
+    error,
     controlMotor,
     toggleHazard,
   };
